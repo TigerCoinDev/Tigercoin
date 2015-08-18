@@ -1555,32 +1555,22 @@ unsigned int GetNextWorkRequired_superseded(const CBlockIndex* pindexLast, const
     printf("After:  %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString().c_str());
 
 
-    printf("shortlongtargetnew CALCULATION returning from original function = %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString().c_str());
-
     return bnNew.GetCompact();
 }
 
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
-    static const int64 forkBlock1 = 9999999; // DGW3 fork
 
-    if (fTestNet) {
+    static const int64 MTCforktime = 1441098000; // MultiTermCeiling fork
+
+    if (TestNet()) {
 	return MultiTermCeiling(pindexLast, pblock);
-    } elseif (pindexLast->GetBlockTime() > 1441098000) {
+    } else if (pindexLast->GetBlockTime() > MTCforktime) {
 	return MultiTermCeiling(pindexLast, pblock);
     } else {
 	return GetNextWorkRequired_superseded(pindexLast, pblock);
     }
-
-
-//    if (fTestNet) {
-//      return DarkGravityWave(pindexLast, pblock);
-//    } elseif (pindexLast->nHeight+1 >= forkBlock1) {
-//      return DarkGravityWave(pindexLast, pblock);
-//    } else {
-//      return GetNextWorkRequired_replaced(pindexLast, pblock);
-//    }
 
 }
 
