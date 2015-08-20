@@ -1342,6 +1342,7 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     static int64 cachedShortTermBlocksCount = 0;
     static CBigNum LongTermPastDifficultyTotal = 0;
     static CBigNum ShortTermPastDifficultyTotal = 0;
+    static CBigNum nTargetNew;
 
     int64 HighestBlockTime = 0;
     int64 LongTermPastBlocksMax = 116800;   	        // Should be about two months worth of blocks; long-term we target one block every 45 seconds over the period of 2 months
@@ -1370,10 +1371,12 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     }
 
     // Check for current calculating block should always be > highest former block!
-    if (BlockReading->nHeight <= HighestIndex) {
+    if (BlockReading->nHeight == HighestIndex) {
+        return nTargetNew.GetCompact();
+    } else if (BlockReading->nHeight <= HighestIndex) {    
         //This should never happen. This scenario is perfectly recoverable, but for now we will just rudely exit
-	printf("THIS SHOULD NOT HAPPEN\n");
-	exit(0);
+        printf("THIS SHOULD NOT HAPPEN\n");
+        exit(0);
     }
 
     HighestBlockTime = BlockReading->GetBlockTime();
@@ -1476,7 +1479,6 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 
 	nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
 	CBigNum nShortTargetNew = ShortTermPastDifficultyAverage * nShortTermActualTimespan / nShortTermTargetTimespan;
-	CBigNum nTargetNew;
 
 	if (nShortTargetNew.GetCompact() > nLongTargetNew.GetCompact()) {
 	    nTargetNew = nShortTargetNew;
