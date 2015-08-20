@@ -140,7 +140,7 @@ public:
         printf("hashMerkleRoot-testnet = %s\n", genesis.hashMerkleRoot.ToString().c_str());
         genesis.print();
         
-        assert(hashGenesisBlock == uint256("0xa6e7e253dd963065e18841baf1f2b3617ff4ee144132e51f86d16096f55f0040"));
+        assert(hashGenesisBlock == uint256("0x000000d1641a6b5ec882202ebfd57c7b3fd92ecdc974320d4c7ef2e07ae019cf"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
