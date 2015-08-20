@@ -1564,7 +1564,7 @@ unsigned int GetNextWorkRequired_superseded(const CBlockIndex* pindexLast, const
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
 
-    static const int64 MTCforktime = 1441098000; // MultiTermCeiling fork
+    static const int64 MTCforktime = 1441270800; // MultiTermCeiling fork on Sept 3
 
     if (TestNet()) {
 	return MultiTermCeiling(pindexLast, pblock);
