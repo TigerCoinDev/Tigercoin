@@ -124,8 +124,9 @@ public:
         strDataDir = "testnet";
 
         // Modify the testnet genesis block so the timestamp is valid for a later start.
-        genesis.nTime = 1378495253;
-        genesis.nNonce = 0;
+        genesis.nTime = 1439972967;
+        genesis.nNonce = 4224972;
+
         
         
         //// debug print
