@@ -2465,7 +2465,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
         return state.DoS(50, error("CheckBlock() : proof of work failed"));
 
     // Check timestamp
-    if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
+    //Four minutes into the future is the maximum accepted timestamp; this is double the time offset we accept from connecting peers
+    if (block.GetBlockTime() > GetAdjustedTime() + 4 * 60)
         return state.Invalid(error("CheckBlock() : block timestamp too far in the future"));
 
     // First transaction must be coinbase, the rest must not be
@@ -3551,7 +3552,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         pfrom->fClient = !(pfrom->nServices & NODE_NETWORK);
 
-        AddTimeData(pfrom->addr, nTime);
+        if (!AddTimeData(pfrom->addr, nTime)) {
+	    pfrom->Misbehaving(100);;
+	}
 
         // Change version
         pfrom->PushMessage("verack");

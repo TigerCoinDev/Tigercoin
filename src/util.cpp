@@ -1343,14 +1343,32 @@ int64 GetAdjustedTime()
     return GetTime() + GetTimeOffset();
 }
 
-void AddTimeData(const CNetAddr& ip, int64 nTime)
+bool AddTimeData(const CNetAddr& ip, int64 nTime)
 {
     int64 nOffsetSample = nTime - GetTime();
+    static int64 timestampMisbehavingCount;
+    static bool fDone;
+
+
+    if (abs64(nOffsetSample) > 120) {		//Two minutes max offset is accepted.
+	timestampMisbehavingCount++;
+	if ((timestampMisbehavingCount > 2) && (vTimeOffsets.size() < 6)) {
+		if (!fDone) {
+                    fDone = true;
+                    string strMessage = _("\n\n********************************************************\n********************************************************\nWarning: Please check that your computer's date and time are correct! If your clock is wrong Tigercoin will not work properly.\n********************************************************\n********************************************************\n");
+                    strMiscWarning = strMessage;
+                    printf("*** %s\n", strMessage.c_str());
+                    uiInterface.ThreadSafeMessageBox(strMessage, "", CClientUIInterface::MSG_WARNING);
+		}
+	}
+        printf("Rejecting time data; offset is too high, samples %d, offset %+"PRI64d" (%+"PRI64d" minutes)\n", vTimeOffsets.size(), nOffsetSample, nOffsetSample/60);
+        return false;
+    }
 
     // Ignore duplicates
     static set<CNetAddr> setKnown;
     if (!setKnown.insert(ip).second)
-        return;
+        return true;
 
     // Add data
     vTimeOffsets.input(nOffsetSample);
@@ -1368,7 +1386,6 @@ void AddTimeData(const CNetAddr& ip, int64 nTime)
         {
             nTimeOffset = 0;
 
-            static bool fDone;
             if (!fDone)
             {
                 // If nobody has a time different than ours but within 5 minutes of ours, give a warning
@@ -1394,6 +1411,7 @@ void AddTimeData(const CNetAddr& ip, int64 nTime)
         }
         printf("nTimeOffset = %+"PRI64d"  (%+"PRI64d" minutes)\n", nTimeOffset, nTimeOffset/60);
     }
+    return true;
 }
 
 uint32_t insecure_rand_Rz = 11;
