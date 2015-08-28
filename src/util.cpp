@@ -1347,17 +1347,20 @@ bool AddTimeData(const CNetAddr& ip, int64 nTime)
 {
     int64 nOffsetSample = nTime - GetTime();
     static int64 timestampMisbehavingCount;
+    static int64 totBlockedTimeDiff;
     static bool fDone;
 
 
     if (abs64(nOffsetSample) > 120) {		//Two minutes max offset is accepted.
 	timestampMisbehavingCount++;
+	totBlockedTimeDiff = totBlockedTimeDiff + nOffsetSample;
+
 	if ((timestampMisbehavingCount > 2) && (vTimeOffsets.size() < 6)) {
 		if (!fDone) {
                     fDone = true;
-                    string strMessage = _("\n\n********************************************************\n********************************************************\nWarning: Please check that your computer's date and time are correct! If your clock is wrong Tigercoin will not work properly.\n********************************************************\n********************************************************\n");
-                    strMiscWarning = strMessage;
-                    printf("*** %s\n", strMessage.c_str());
+		    char offsetString[21]; // enough to hold all numbers up to 64-bits
+		    sprintf(offsetString, "%d", (totBlockedTimeDiff / timestampMisbehavingCount));
+		    string strMessage = string("\n\n********************************************************\n********************************************************\nWarning: Please check that your computer's date and time are correct! If your clock is wrong Tigercoin will not work properly.\nTry changing your time by an offset of approx: ") + string(offsetString) + string(" seconds. If this does not sound plausible, DO NOT DO ANYTHING!\n********************************************************\n********************************************************\n");
                     uiInterface.ThreadSafeMessageBox(strMessage, "", CClientUIInterface::MSG_WARNING);
 		}
 	}
