@@ -2480,13 +2480,11 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 	// Former block found. Check whether the strict-timer has been enabled
         if (pindexPrev->GetBlockTime() > StrictTimerSwitchTime) {
 	        // Check timestamp -- strict
-		printf("Using strict timer!\n");
 	        // Four minutes into the future is the max accepted timestamp; this is double the max offset we accept from connected peers
 	        if (block.GetBlockTime() > GetAdjustedTime() + 4 * 60)
 	            return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using strict timer)"));
 	    } else {
 	        // Check timestamp -- legacy
-		printf("NOT using strict timer\n");
 	        if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
 	            return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using legacy timer)"));
 	    }
