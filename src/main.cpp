@@ -2465,7 +2465,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
         return state.DoS(50, error("CheckBlock() : proof of work failed"));
 
     // Check timestamp
-    static const int64 StrictTimerSoftForktime = 1441270800; // MultiTermCeiling fork on Sept 3
+    static const int64 StrictTimerSwitchTime = 1441270800; // MultiTermCeiling fork on Sept 3
     CBlockIndex* pindexPrev = NULL;
 
     map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
@@ -2477,8 +2477,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
             return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using legacy timer)"));
     } else {
         pindexPrev = (*mi).second;
-	// Former block found. Check wether we are past the strict-timer fork and check block time against the right timer
-        if (pindexPrev->GetBlockTime() > StrictTimerSoftForktime) {
+	// Former block found. Check whether the strict-timer has been enabled
+        if (pindexPrev->GetBlockTime() > StrictTimerSwitchTime) {
 	        // Check timestamp -- strict
 		printf("Using strict timer!\n");
 	        // Four minutes into the future is the max accepted timestamp; this is double the max offset we accept from connected peers
