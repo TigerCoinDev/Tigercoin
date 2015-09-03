@@ -2465,8 +2465,30 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
         return state.DoS(50, error("CheckBlock() : proof of work failed"));
 
     // Check timestamp
-    if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
-        return state.Invalid(error("CheckBlock() : block timestamp too far in the future"));
+    static const int64 StrictTimerSwitchTime = 1441270800; // MultiTermCeiling fork on Sept 3
+    CBlockIndex* pindexPrev = NULL;
+
+    map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
+    if (mi == mapBlockIndex.end()) {
+        printf("Former block not found so NULL -> Not using strict timer for now since block received out-of-order\n");
+
+        // Check timestamp -- legacy
+        if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
+            return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using legacy timer)"));
+    } else {
+        pindexPrev = (*mi).second;
+	// Former block found. Check whether the strict-timer has been enabled
+        if (pindexPrev->GetBlockTime() > StrictTimerSwitchTime) {
+	        // Check timestamp -- strict
+	        // Four minutes into the future is the max accepted timestamp; this is double the max offset we accept from connected peers
+	        if (block.GetBlockTime() > GetAdjustedTime() + 4 * 60)
+	            return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using strict timer)"));
+	    } else {
+	        // Check timestamp -- legacy
+	        if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
+	            return state.Invalid(error("CheckBlock() : block timestamp too far in the future (using legacy timer)"));
+	    }
+    }
 
     // First transaction must be coinbase, the rest must not be
     if (block.vtx.empty() || !block.vtx[0].IsCoinBase())
@@ -2520,6 +2542,7 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CDiskBlockPos* dbp)
     CBlockIndex* pindexPrev = NULL;
     int nHeight = 0;
     if (hash != Params().HashGenesisBlock()) {
+
         map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
         if (mi == mapBlockIndex.end())
             return state.DoS(10, error("AcceptBlock() : prev block not found"));
@@ -3551,7 +3574,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         pfrom->fClient = !(pfrom->nServices & NODE_NETWORK);
 
-        AddTimeData(pfrom->addr, nTime);
+        if (!AddTimeData(pfrom->addr, nTime)) {
+	    pfrom->Misbehaving(100);;
+	}
 
         // Change version
         pfrom->PushMessage("verack");
