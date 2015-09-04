@@ -1491,7 +1491,7 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 	    return nProofOfWorkLimit.GetCompact();
 	}
 
-	printf("Returning new target = %08x  %s\n", nTargetNew.GetCompact(), nTargetNew.getuint256().ToString().c_str());
+//	printf("Returning new target = %08x  %s\n", nTargetNew.GetCompact(), nTargetNew.getuint256().ToString().c_str());
 	return nTargetNew.GetCompact();
 
 }
@@ -1564,7 +1564,7 @@ unsigned int GetNextWorkRequired_superseded(const CBlockIndex* pindexLast, const
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
 
-    static const int64 MTCforktime = 1441270800; // MultiTermCeiling fork on Sept 3
+    static const int64 MTCforktime = 1442584800; // MultiTermCeiling fork on Sept 18
 
     if (TestNet()) {
 	return MultiTermCeiling(pindexLast, pblock);
@@ -2465,7 +2465,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
         return state.DoS(50, error("CheckBlock() : proof of work failed"));
 
     // Check timestamp
-    static const int64 StrictTimerSwitchTime = 1441270800; // MultiTermCeiling fork on Sept 3
+    static const int64 StrictTimerSwitchTime = 1442584800; // MultiTermCeiling fork on Sept 18
     CBlockIndex* pindexPrev = NULL;
 
     map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
