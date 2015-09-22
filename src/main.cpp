@@ -1374,16 +1374,12 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     if (BlockReading->nHeight == HighestIndex) {
         return nTargetNew.GetCompact();
     } else if (BlockReading->nHeight <= HighestIndex) {
-        //This should never happen. This scenario is perfectly recoverable, but for now we will just rudely exit
-
+	  //We are receiving an alternative chain. Reset stats:
     	  HighestIndex = -1;
     	  cachedLongTermBlocksCount = 0;
     	  cachedShortTermBlocksCount = 0;
     	  LongTermPastDifficultyTotal = 0;
     	  ShortTermPastDifficultyTotal = 0;
-
-//        printf("THIS SHOULD NOT HAPPEN\n");
-//        exit(0);
     }
 
     HighestBlockTime = BlockReading->GetBlockTime();
