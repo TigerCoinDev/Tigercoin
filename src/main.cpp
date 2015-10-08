@@ -1361,6 +1361,12 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     CBlockIndex *pLongTermOldestBlockIndex;
     CBlockIndex *pShortTermOldestBlockIndex;
 
+    int version;
+    if (BlockReading->nHeight > bugfixforkheight) {
+        version = 2;
+    } else {
+        version = 1;
+    }
 
     // Run starting at Genesis block; so just initiate and all is done.
     if (BlockReading->nHeight == 0) {
@@ -1456,88 +1462,84 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 	}
 
 	if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
-	    BlockReading = BlockReading->pprev;
-	}
 
-	//Now fetch the oldest blocks represented in the total diff values
-	int longTermOldestBlockIndex = (HighestIndex - cachedLongTermBlocksCount);
-	int shortTermOldestBlockIndex = (HighestIndex - cachedShortTermBlocksCount);
-	if (longTermOldestBlockIndex < 1) { longTermOldestBlockIndex = 0; }
-	if (shortTermOldestBlockIndex < 1) { shortTermOldestBlockIndex = 0; }
-	pLongTermOldestBlockIndex = FindBlockByHeight(longTermOldestBlockIndex);
-	pShortTermOldestBlockIndex = FindBlockByHeight(shortTermOldestBlockIndex);
+	BlockReading = BlockReading->pprev;
+    }
 
-	nLongTermActualTimespan = HighestBlockTime - pLongTermOldestBlockIndex->GetBlockTime();
-	nShortTermActualTimespan = HighestBlockTime - pShortTermOldestBlockIndex->GetBlockTime();
+    //Now fetch the oldest blocks represented in the total diff values
+    int longTermOldestBlockIndex = (HighestIndex - cachedLongTermBlocksCount);
+    int shortTermOldestBlockIndex = (HighestIndex - cachedShortTermBlocksCount);
+    if (longTermOldestBlockIndex < 1) { longTermOldestBlockIndex = 0; }
+    if (shortTermOldestBlockIndex < 1) { shortTermOldestBlockIndex = 0; }
+    pLongTermOldestBlockIndex = FindBlockByHeight(longTermOldestBlockIndex);
+    pShortTermOldestBlockIndex = FindBlockByHeight(shortTermOldestBlockIndex);
 
-
-	//calc should-be timespan and ratio-difference for retarget:
-   	int64 nLongTermTargetTimespan = (cachedLongTermBlocksCount) * nTargetSpacing;
-   	int64 nShortTermTargetTimespan = (cachedShortTermBlocksCount) * nTargetSpacing;
-	if (nLongTermTargetTimespan == 0) { nLongTermTargetTimespan = 1; nLongTermActualTimespan = 1; }
-	if (nShortTermTargetTimespan == 0) { nShortTermTargetTimespan = 1; nShortTermActualTimespan = 1; }
+    nLongTermActualTimespan = HighestBlockTime - pLongTermOldestBlockIndex->GetBlockTime();
+    nShortTermActualTimespan = HighestBlockTime - pShortTermOldestBlockIndex->GetBlockTime();
 
 
+    //calc should-be timespan and ratio-difference for retarget:
+    int64 nLongTermTargetTimespan = (cachedLongTermBlocksCount) * nTargetSpacing;
+    int64 nShortTermTargetTimespan = (cachedShortTermBlocksCount) * nTargetSpacing;
+    if (nLongTermTargetTimespan == 0) { nLongTermTargetTimespan = 1; nLongTermActualTimespan = 1; }
+    if (nShortTermTargetTimespan == 0) { nShortTermTargetTimespan = 1; nShortTermActualTimespan = 1; }
 
-	CBigNum LongTermPastDifficultyAverage;
-	LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
-	CBigNum nLongTargetNew;
-	nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
+
+    if (version == 2) {
+      if (nLongTermActualTimespan < 1) {
+        nLongTermActualTimespan = 1;
+      }
+    } else {
+      if (nLongTermActualTimespan < nLongTermTargetTimespan/3) {
+        nLongTermActualTimespan = nLongTermTargetTimespan/3;
+      }
+    }
+
+    if (nLongTermActualTimespan > nLongTermTargetTimespan*3) {
+      nLongTermActualTimespan = nLongTermTargetTimespan*3;
+    }
+
+    if (version == 2) {
+      if (nShortTermActualTimespan < 1) {
+        nShortTermActualTimespan = 1;
+      }
+    } else {
+      if (nShortTermActualTimespan < nShortTermTargetTimespan/10){
+        nShortTermActualTimespan = nShortTermTargetTimespan/10;
+      }
+    }
+
+    if (nShortTermActualTimespan > nShortTermTargetTimespan*10){
+      nShortTermActualTimespan = nShortTermTargetTimespan*10;
+    }
 
 
-	if (BlockReading->nHeight > bugfixforkheight) {
-          if (nLongTermActualTimespan < 1) {
-              nLongTermActualTimespan = 1;
-	  }
-	} else {
-          if (nLongTermActualTimespan < nLongTermTargetTimespan/3) {
-              nLongTermActualTimespan = nLongTermTargetTimespan/3;
-	  }
-	}
+    //calc avg diff, actualtimespan, targettimespan, newdiff
+    CBigNum LongTermPastDifficultyAverage;
+    LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
+    CBigNum ShortTermPastDifficultyAverage = ShortTermPastDifficultyTotal/cachedShortTermBlocksCount;
 
-        if (nLongTermActualTimespan > nLongTermTargetTimespan*3) {
-            nLongTermActualTimespan = nLongTermTargetTimespan*3;
-	}
+    CBigNum nLongTargetNew;
+    nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
+    CBigNum nShortTargetNew = ShortTermPastDifficultyAverage * nShortTermActualTimespan / nShortTermTargetTimespan;
 
-	if (BlockReading->nHeight > bugfixforkheight) {
-          if (nShortTermActualTimespan < 1) {
-              nShortTermActualTimespan = 1;
-	  }
-	} else {
-          if (nShortTermActualTimespan < nShortTermTargetTimespan/10){
-              nShortTermActualTimespan = nShortTermTargetTimespan/10;
-	  }
-	}
+    //Longterm ceiling should limit excessive changes, but not limit natural changes too much:
+    if (version == 2) {
+      nLongTargetNew /= 40;
+    }
 
-        if (nShortTermActualTimespan > nShortTermTargetTimespan*10){
-            nShortTermActualTimespan = nShortTermTargetTimespan*10;
-	}
+    if (nShortTargetNew > nLongTargetNew) {
+      nTargetNew = nShortTargetNew;
+    } else {
+      nTargetNew = nLongTargetNew;
+    }
 
-	//calc avg diff, actualtimespan, targettimespan, newdiff
-
-	LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
-	CBigNum ShortTermPastDifficultyAverage = ShortTermPastDifficultyTotal/cachedShortTermBlocksCount;
-
-	nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
-	CBigNum nShortTargetNew = ShortTermPastDifficultyAverage * nShortTermActualTimespan / nShortTermTargetTimespan;
-
-	//Longterm ceiling should limit excessive changes, but not limit natural changes too much:
-	if (BlockReading->nHeight > bugfixforkheight) {
-		nLongTargetNew /= 40;
-	}
-
-	if (nShortTargetNew > nLongTargetNew) {
-	    nTargetNew = nShortTargetNew;
-	} else {
-	    nTargetNew = nLongTargetNew;
-	}
-
-	if (nTargetNew > nProofOfWorkLimit) {
-	    return nProofOfWorkLimit.GetCompact();
-	}
+    if (nTargetNew > nProofOfWorkLimit) {
+      return nProofOfWorkLimit.GetCompact();
+    }
 
 //	printf("Returning new target = %08x  %s\n", nTargetNew.GetCompact(), nTargetNew.getuint256().ToString().c_str());
-	return nTargetNew.GetCompact();
+    return nTargetNew.GetCompact();
 
 }
 
@@ -5106,3 +5108,4 @@ public:
         mapOrphanTransactions.clear();
     }
 } instance_of_cmaincleanup;
+
