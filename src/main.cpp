@@ -1337,25 +1337,36 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     const CBlockIndex *BlockReading = pindexLast;
 
     static const int64 nTargetSpacing = 45; 		// TigerCoin: 45 sec block target
-    static int64 HighestIndex = -1;
-    static int64 cachedLongTermBlocksCount = 0;
-    static int64 cachedShortTermBlocksCount = 0;
+    static int HighestIndex = -1;
+    static int cachedLongTermBlocksCount = 0;
+    static int cachedShortTermBlocksCount = 0;
     static CBigNum LongTermPastDifficultyTotal = 0;
     static CBigNum ShortTermPastDifficultyTotal = 0;
     static CBigNum nTargetNew;
+    static int cacheAge;
 
     int64 HighestBlockTime = 0;
-    int64 LongTermPastBlocksMax = 116800;   	        // Should be about two months worth of blocks; long-term we target one block every 45 seconds over the period of 2 months
-    int64 ShortTermPastBlocksMax = 20;      	       	// Should be about 15 minutes worth of blocks; short-term we target one block every 45 seconds over the period of 15 minutes
-    int64 HighestIndexPrev = 0;
-    int64 stopShortTermAtBlock;
+    int LongTermPastBlocksMax = 116800;   	        // Should be about two months worth of blocks; long-term we target one block every 45 seconds over the period of 2 months
+    int ShortTermPastBlocksMax = 20;      	       	// Should be about 15 minutes worth of blocks; short-term we target one block every 45 seconds over the period of 15 minutes
+    int HighestIndexPrev = 0;
+    int stopShortTermAtBlock;
     stopShortTermAtBlock = 0;
     int64 nLongTermActualTimespan;
     int64 nShortTermActualTimespan;
+    int maxCacheAge = 1;
+
+    static const int bugfixforkheight = 482403;
+
 
     CBlockIndex *pLongTermOldestBlockIndex;
     CBlockIndex *pShortTermOldestBlockIndex;
 
+    int version;
+    if (BlockReading->nHeight > bugfixforkheight) {
+        version = 2;
+    } else {
+        version = 1;
+    }
 
     // Run starting at Genesis block; so just initiate and all is done.
     if (BlockReading->nHeight == 0) {
@@ -1372,15 +1383,29 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 
     // Check for current calculating block should always be > highest former block!
     if (BlockReading->nHeight == HighestIndex) {
-        return nTargetNew.GetCompact();
+	if (nTargetNew > nProofOfWorkLimit) {
+	  return nProofOfWorkLimit.GetCompact();
+	} else {
+          return nTargetNew.GetCompact();
+	}
     } else if (BlockReading->nHeight <= HighestIndex) {
 	  //We are receiving an alternative chain. Reset stats:
+	  cacheAge = 0;
     	  HighestIndex = -1;
     	  cachedLongTermBlocksCount = 0;
     	  cachedShortTermBlocksCount = 0;
     	  LongTermPastDifficultyTotal = 0;
     	  ShortTermPastDifficultyTotal = 0;
+    } else if (cacheAge >= maxCacheAge) {
+          //We are receiving an alternative chain. Reset stats:
+          cacheAge = 0;
+          HighestIndex = -1;
+          cachedLongTermBlocksCount = 0;
+          cachedShortTermBlocksCount = 0;
+          LongTermPastDifficultyTotal = 0;
+          ShortTermPastDifficultyTotal = 0;
     }
+    cacheAge++;
 
     HighestBlockTime = BlockReading->GetBlockTime();
 
@@ -1437,65 +1462,84 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 	}
 
 	if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
-	    BlockReading = BlockReading->pprev;
-	}
 
-	//Now fetch the oldest blocks represented in the total diff values
-	int64 longTermOldestBlockIndex = (HighestIndex - cachedLongTermBlocksCount);
-	int64 shortTermOldestBlockIndex = (HighestIndex - cachedShortTermBlocksCount);
-	if (longTermOldestBlockIndex < 1) { longTermOldestBlockIndex = 0; }
-	if (shortTermOldestBlockIndex < 1) { shortTermOldestBlockIndex = 0; }
-	pLongTermOldestBlockIndex = FindBlockByHeight(longTermOldestBlockIndex);
-	pShortTermOldestBlockIndex = FindBlockByHeight(shortTermOldestBlockIndex);
+	BlockReading = BlockReading->pprev;
+    }
 
-	nLongTermActualTimespan = HighestBlockTime - pLongTermOldestBlockIndex->GetBlockTime();
-	nShortTermActualTimespan = HighestBlockTime - pShortTermOldestBlockIndex->GetBlockTime();
+    //Now fetch the oldest blocks represented in the total diff values
+    int longTermOldestBlockIndex = (HighestIndex - cachedLongTermBlocksCount);
+    int shortTermOldestBlockIndex = (HighestIndex - cachedShortTermBlocksCount);
+    if (longTermOldestBlockIndex < 1) { longTermOldestBlockIndex = 0; }
+    if (shortTermOldestBlockIndex < 1) { shortTermOldestBlockIndex = 0; }
+    pLongTermOldestBlockIndex = FindBlockByHeight(longTermOldestBlockIndex);
+    pShortTermOldestBlockIndex = FindBlockByHeight(shortTermOldestBlockIndex);
 
-
-	//calc should-be timespan and ratio-difference for retarget:
-   	int64 nLongTermTargetTimespan = (cachedLongTermBlocksCount) * nTargetSpacing;
-   	int64 nShortTermTargetTimespan = (cachedShortTermBlocksCount) * nTargetSpacing;
-	if (nLongTermTargetTimespan == 0) { nLongTermTargetTimespan = 1; nLongTermActualTimespan = 1; }
-	if (nShortTermTargetTimespan == 0) { nShortTermTargetTimespan = 1; nShortTermActualTimespan = 1; }
+    nLongTermActualTimespan = HighestBlockTime - pLongTermOldestBlockIndex->GetBlockTime();
+    nShortTermActualTimespan = HighestBlockTime - pShortTermOldestBlockIndex->GetBlockTime();
 
 
-	CBigNum LongTermPastDifficultyAverage;
-	LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
-	CBigNum nLongTargetNew;
-	nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
-
-        if (nLongTermActualTimespan < nLongTermTargetTimespan/3)
-            nLongTermActualTimespan = nLongTermTargetTimespan/3;
-        if (nLongTermActualTimespan > nLongTermTargetTimespan*3)
-            nLongTermActualTimespan = nLongTermTargetTimespan*3;
-
-        if (nShortTermActualTimespan < nShortTermTargetTimespan/10)
-            nShortTermActualTimespan = nShortTermTargetTimespan/10;
-        if (nShortTermActualTimespan > nShortTermTargetTimespan*10)
-            nShortTermActualTimespan = nShortTermTargetTimespan*10;
+    //calc should-be timespan and ratio-difference for retarget:
+    int64 nLongTermTargetTimespan = (cachedLongTermBlocksCount) * nTargetSpacing;
+    int64 nShortTermTargetTimespan = (cachedShortTermBlocksCount) * nTargetSpacing;
+    if (nLongTermTargetTimespan == 0) { nLongTermTargetTimespan = 1; nLongTermActualTimespan = 1; }
+    if (nShortTermTargetTimespan == 0) { nShortTermTargetTimespan = 1; nShortTermActualTimespan = 1; }
 
 
-	//calc avg diff, actualtimespan, targettimespan, newdiff
+    if (version == 2) {
+      if (nLongTermActualTimespan < 1) {
+        nLongTermActualTimespan = 1;
+      }
+    } else {
+      if (nLongTermActualTimespan < nLongTermTargetTimespan/3) {
+        nLongTermActualTimespan = nLongTermTargetTimespan/3;
+      }
+    }
 
-	LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
-	CBigNum ShortTermPastDifficultyAverage = ShortTermPastDifficultyTotal/cachedShortTermBlocksCount;
+    if (nLongTermActualTimespan > nLongTermTargetTimespan*3) {
+      nLongTermActualTimespan = nLongTermTargetTimespan*3;
+    }
 
-	nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
-	CBigNum nShortTargetNew = ShortTermPastDifficultyAverage * nShortTermActualTimespan / nShortTermTargetTimespan;
+    if (version == 2) {
+      if (nShortTermActualTimespan < 1) {
+        nShortTermActualTimespan = 1;
+      }
+    } else {
+      if (nShortTermActualTimespan < nShortTermTargetTimespan/10){
+        nShortTermActualTimespan = nShortTermTargetTimespan/10;
+      }
+    }
 
-	if (nShortTargetNew.GetCompact() > nLongTargetNew.GetCompact()) {
-	    nTargetNew = nShortTargetNew;
-	} else {
-	    nTargetNew = nLongTargetNew;
-	}
+    if (nShortTermActualTimespan > nShortTermTargetTimespan*10){
+      nShortTermActualTimespan = nShortTermTargetTimespan*10;
+    }
 
 
-	if (nTargetNew > nProofOfWorkLimit) {
-	    return nProofOfWorkLimit.GetCompact();
-	}
+    //calc avg diff, actualtimespan, targettimespan, newdiff
+    CBigNum LongTermPastDifficultyAverage;
+    LongTermPastDifficultyAverage = LongTermPastDifficultyTotal/cachedLongTermBlocksCount;
+    CBigNum ShortTermPastDifficultyAverage = ShortTermPastDifficultyTotal/cachedShortTermBlocksCount;
+
+    CBigNum nLongTargetNew;
+    nLongTargetNew = LongTermPastDifficultyAverage * nLongTermActualTimespan / nLongTermTargetTimespan;
+    CBigNum nShortTargetNew = ShortTermPastDifficultyAverage * nShortTermActualTimespan / nShortTermTargetTimespan;
+
+    //Longterm ceiling should limit excessive changes, but not limit natural changes too much:
+    if (version == 2) {
+      nLongTargetNew /= 40;
+    }
+
+    if (nShortTargetNew > nLongTargetNew) {
+      nTargetNew = nShortTargetNew;
+    } else {
+      nTargetNew = nLongTargetNew;
+    }
+
+    if (nTargetNew > nProofOfWorkLimit) {
+      return nProofOfWorkLimit.GetCompact();
+    }
 
 //	printf("Returning new target = %08x  %s\n", nTargetNew.GetCompact(), nTargetNew.getuint256().ToString().c_str());
-	return nTargetNew.GetCompact();
+    return nTargetNew.GetCompact();
 
 }
 
@@ -5064,3 +5108,4 @@ public:
         mapOrphanTransactions.clear();
     }
 } instance_of_cmaincleanup;
+
