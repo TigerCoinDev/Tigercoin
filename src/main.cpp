@@ -1221,7 +1221,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos)
     }
     catch (std::exception &e) {
         return error("%s() : deserialize or I/O error", __PRETTY_FUNCTION__);
-    }
+  }
 
     // Check the header
     if (!CheckProofOfWork(block.GetHash(), block.nBits))
@@ -1335,15 +1335,15 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     CBigNum nProofOfWorkLimit = Params().ProofOfWorkLimit();
 
     const CBlockIndex *BlockReading = pindexLast;
+    const CBlockIndex *oldBlock;
 
     static const int64 nTargetSpacing = 45; 		// TigerCoin: 45 sec block target
-    static int HighestIndex = -1;
-    static int cachedLongTermBlocksCount = 0;
-    static int cachedShortTermBlocksCount = 0;
-    static CBigNum LongTermPastDifficultyTotal = 0;
-    static CBigNum ShortTermPastDifficultyTotal = 0;
-    static CBigNum nTargetNew;
-    static int cacheAge;
+    int HighestIndex = -1;
+    int cachedLongTermBlocksCount = 0;
+    int cachedShortTermBlocksCount = 0;
+    CBigNum LongTermPastDifficultyTotal = 0;
+    CBigNum ShortTermPastDifficultyTotal = 0;
+    CBigNum nTargetNew;
 
     int64 HighestBlockTime = 0;
     int LongTermPastBlocksMax = 116800;   	        // Should be about two months worth of blocks; long-term we target one block every 45 seconds over the period of 2 months
@@ -1353,16 +1353,15 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     stopShortTermAtBlock = 0;
     int64 nLongTermActualTimespan;
     int64 nShortTermActualTimespan;
-    int maxCacheAge = 1;
 
+	int64 nLongOldestTimespan;
+	int64 nShortOldestTimespan;
+	
     static const int bugfixforkheight = 482403;
 
 
-    CBlockIndex *pLongTermOldestBlockIndex;
-    CBlockIndex *pShortTermOldestBlockIndex;
-
     int version;
-    if (BlockReading->nHeight > bugfixforkheight) {
+    if ((BlockReading->nHeight > bugfixforkheight) || TestNet()) {
         version = 2;
     } else {
         version = 1;
@@ -1370,120 +1369,75 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
 
     // Run starting at Genesis block; so just initiate and all is done.
     if (BlockReading->nHeight == 0) {
-        //Initiate values
-	ShortTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
-	LongTermPastDifficultyTotal = nProofOfWorkLimit;
-	LongTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
-	cachedShortTermBlocksCount = 1;
-	cachedLongTermBlocksCount = 1;
-	HighestIndex = 0;
-
         return nProofOfWorkLimit.GetCompact();
     }
 
-    // Check for current calculating block should always be > highest former block!
-    if (BlockReading->nHeight == HighestIndex) {
-	if (nTargetNew > nProofOfWorkLimit) {
-	  return nProofOfWorkLimit.GetCompact();
-	} else {
-          return nTargetNew.GetCompact();
-	}
-    } else if (BlockReading->nHeight <= HighestIndex) {
-	  //We are receiving an alternative chain. Reset stats:
-	  cacheAge = 0;
-    	  HighestIndex = -1;
-    	  cachedLongTermBlocksCount = 0;
-    	  cachedShortTermBlocksCount = 0;
-    	  LongTermPastDifficultyTotal = 0;
-    	  ShortTermPastDifficultyTotal = 0;
-    } else if (cacheAge >= maxCacheAge) {
-          //We are receiving an alternative chain. Reset stats:
-          cacheAge = 0;
-          HighestIndex = -1;
-          cachedLongTermBlocksCount = 0;
-          cachedShortTermBlocksCount = 0;
-          LongTermPastDifficultyTotal = 0;
-          ShortTermPastDifficultyTotal = 0;
-    }
-    cacheAge++;
+	//No caching anymore. Gives too much issues
+	cachedLongTermBlocksCount = 0;
+	cachedShortTermBlocksCount = 0;
+	LongTermPastDifficultyTotal = 0;
+	ShortTermPastDifficultyTotal = 0;
+
 
     HighestBlockTime = BlockReading->GetBlockTime();
 
-    if (HighestIndex < 0) {
-	//We are runnng this calculation now for the first time since client startup. Limit to the max blocks:
 	if (BlockReading->nHeight > LongTermPastBlocksMax) {
-	    HighestIndexPrev = BlockReading->nHeight - LongTermPastBlocksMax;
+		HighestIndexPrev = BlockReading->nHeight - LongTermPastBlocksMax;
 	} else {
-	    HighestIndexPrev = -1;
+		HighestIndexPrev = -1;
 	}
-    } else {
-        HighestIndexPrev = HighestIndex;
-    }
 
     HighestIndex = BlockReading->nHeight;
 
     for (unsigned int i = BlockReading->nHeight; BlockReading->nHeight > HighestIndexPrev; i--) {
-	if (cachedLongTermBlocksCount == 0) {
-	    LongTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
-        } else {
-	    LongTermPastDifficultyTotal += CBigNum().SetCompact(BlockReading->nBits);
-	}
+		oldBlock = BlockReading->pprev;
+		if (cachedLongTermBlocksCount == 0) {
+			LongTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
+			nLongOldestTimespan = oldBlock->GetBlockTime();
+		} else {
+			LongTermPastDifficultyTotal += CBigNum().SetCompact(BlockReading->nBits);
+			nLongOldestTimespan = oldBlock->GetBlockTime();
+		}
 
         if (BlockReading->nHeight > stopShortTermAtBlock) {
-	    if (cachedShortTermBlocksCount == 0) {
-	        ShortTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
+			if (cachedShortTermBlocksCount == 0) {
+				ShortTermPastDifficultyTotal.SetCompact(BlockReading->nBits);
+				nShortOldestTimespan = oldBlock->GetBlockTime();
             } else {
-		ShortTermPastDifficultyTotal += CBigNum().SetCompact(BlockReading->nBits);
-	    }
-	}
+				ShortTermPastDifficultyTotal += CBigNum().SetCompact(BlockReading->nBits);
+				nShortOldestTimespan = oldBlock->GetBlockTime();
+			}
+		}
 
-	if (cachedLongTermBlocksCount < LongTermPastBlocksMax) {
-	    //Long term history not full yet. Just add this block and we are good.
-	    cachedLongTermBlocksCount++;
- 	} else {
-	    //Long term history full. Remove the oldest block target from total history value (fifo).
-	    pLongTermOldestBlockIndex = FindBlockByHeight(i - LongTermPastBlocksMax);
-	    LongTermPastDifficultyTotal -= CBigNum().SetCompact(pLongTermOldestBlockIndex->nBits);
-	}
+		if (cachedLongTermBlocksCount < LongTermPastBlocksMax) {
+			//Long term history not full yet. Just add this block and we are good.
+			cachedLongTermBlocksCount++;
+		}
 
-	if (cachedShortTermBlocksCount < ShortTermPastBlocksMax) {
-	    if (stopShortTermAtBlock == 0) {
-		stopShortTermAtBlock = HighestIndex - ShortTermPastBlocksMax + cachedShortTermBlocksCount;
-	    }
+		if (cachedShortTermBlocksCount < ShortTermPastBlocksMax) {
+			if (stopShortTermAtBlock == 0) {
+				stopShortTermAtBlock = HighestIndex - ShortTermPastBlocksMax + cachedShortTermBlocksCount;
+			}
 
-	    //Short term history not full yet. Just add this block and we are good.
-	    cachedShortTermBlocksCount++;
-	} else {
-	    if (BlockReading->nHeight > stopShortTermAtBlock) {
-	        //Short term history full. Remove the oldest block target from total history value (fifo).
-		pShortTermOldestBlockIndex = FindBlockByHeight(i - ShortTermPastBlocksMax);
-		ShortTermPastDifficultyTotal -= CBigNum().SetCompact(pShortTermOldestBlockIndex->nBits);
-	    }
-	}
+			//Short term history not full yet. Just add this block and we are good.
+			cachedShortTermBlocksCount++;
+		}
 
-	if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
+		if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
 
-	BlockReading = BlockReading->pprev;
+		BlockReading = BlockReading->pprev;
     }
 
-    //Now fetch the oldest blocks represented in the total diff values
-    int longTermOldestBlockIndex = (HighestIndex - cachedLongTermBlocksCount);
-    int shortTermOldestBlockIndex = (HighestIndex - cachedShortTermBlocksCount);
-    if (longTermOldestBlockIndex < 1) { longTermOldestBlockIndex = 0; }
-    if (shortTermOldestBlockIndex < 1) { shortTermOldestBlockIndex = 0; }
-    pLongTermOldestBlockIndex = FindBlockByHeight(longTermOldestBlockIndex);
-    pShortTermOldestBlockIndex = FindBlockByHeight(shortTermOldestBlockIndex);
-
-    nLongTermActualTimespan = HighestBlockTime - pLongTermOldestBlockIndex->GetBlockTime();
-    nShortTermActualTimespan = HighestBlockTime - pShortTermOldestBlockIndex->GetBlockTime();
-
-
+	nLongTermActualTimespan = HighestBlockTime - nLongOldestTimespan;
+    nShortTermActualTimespan = HighestBlockTime - nShortOldestTimespan;	
+	
     //calc should-be timespan and ratio-difference for retarget:
     int64 nLongTermTargetTimespan = (cachedLongTermBlocksCount) * nTargetSpacing;
     int64 nShortTermTargetTimespan = (cachedShortTermBlocksCount) * nTargetSpacing;
     if (nLongTermTargetTimespan == 0) { nLongTermTargetTimespan = 1; nLongTermActualTimespan = 1; }
     if (nShortTermTargetTimespan == 0) { nShortTermTargetTimespan = 1; nShortTermActualTimespan = 1; }
 
+	
 
     if (version == 2) {
       if (nLongTermActualTimespan < 1) {
@@ -1542,7 +1496,6 @@ unsigned int MultiTermCeiling(const CBlockIndex* pindexLast, const CBlockHeader 
     return nTargetNew.GetCompact();
 
 }
-
 
 unsigned int GetNextWorkRequired_superseded(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
